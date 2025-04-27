@@ -1,15 +1,15 @@
-import json
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi_mcp import FastApiMCP
-from google import genai
 from google.genai import types
-from mcp import Tool as MCPTool
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 from pydantic import BaseModel
-from utils import convert_schema
+from utils import (
+    dump_function_response,
+    query_model,
+    tools_res_to_gemini_func_declaration,
+)
 
 load_dotenv()
 
@@ -20,8 +20,6 @@ mcp = FastApiMCP(
     include_tags=["mcp"],
 )
 mcp.mount()
-
-client = genai.Client()
 
 
 class ItemModel(BaseModel):
@@ -39,34 +37,6 @@ class AskResponse(BaseModel):
     answer: str
 
 
-def tools_res_to_gemini_func_declaration(
-    tools: list[MCPTool],
-) -> list[types.FunctionDeclaration]:
-    """Convert MCP tool response to Gemini function declaration"""
-    return [
-        types.FunctionDeclaration(
-            description=tool.description,
-            name=tool.name,
-            parameters=convert_schema(tool.inputSchema),
-        )
-        for tool in tools
-    ]
-
-
-def query_model(
-    content: types.ContentListUnion,
-    function_declarations: list[types.FunctionDeclaration],
-):
-    """Query the gemini model allowing to use provided tools with the given tools"""
-    return client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=content,
-        config=types.GenerateContentConfig(
-            tools=[types.Tool(function_declarations=function_declarations)]
-        ),
-    )
-
-
 @app.post("/ask", tags=["ai"], operation_id="ask_question", response_model=AskResponse)
 async def ask_question(body: AskRequest):
     """
@@ -76,8 +46,9 @@ async def ask_question(body: AskRequest):
         "http://localhost:1337/mcp",
     ) as streams:
         async with ClientSession(streams[0], streams[1]) as session:
-            # TODO: Improve initial prompt to give answers even if no tools can be used
+            # TODO: Improve initial prompt to give answers even if no tools can be used (or do I just leave it as is?)
             # TODO: Save and use context of the chat
+            # TODO: Make it possible to call multiple tools (not sure if it is possible with gemini and any other llm)
 
             await session.initialize()
             tools_res = await session.list_tools()
@@ -101,30 +72,15 @@ async def ask_question(body: AskRequest):
             part = ai_res.candidates[0].content.parts[0]
 
             if part.function_call and part.function_call.name:
-                function_res = await session.call_tool(
-                    part.function_call.name, part.function_call.args
-                )
-                if function_res.isError:
-                    raise Exception(
-                        f"Something went wrong when calling function: {part.function_call.name}"
-                    )
-                function_res_content = function_res.content[0]
-
-                assert (
-                    function_res_content and function_res_content.type == "text"
-                ), "Function res content must be a text content"
-
                 assert (
                     part.function_call.name and part.function_call.args
                 ), "Function call must have name and args"
 
-                try:
-                    dict_function_res = json.loads(function_res_content.text)
-                except Exception as e:
-                    print(e)
-                    raise Exception(
-                        f"Respone from function call was not valid JSON: {function_res_content.text}, function name: {part.function_call.name}"
-                    )
+                function_res = await session.call_tool(
+                    part.function_call.name, part.function_call.args
+                )
+
+                dict_function_res = dump_function_response(function_res)
 
                 content.append(
                     types.ModelContent(
