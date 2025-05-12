@@ -46,22 +46,30 @@ async def ask_question(body: AskRequest):
         "http://localhost:1337/mcp",
     ) as streams:
         async with ClientSession(streams[0], streams[1]) as session:
-            # TODO: Improve initial prompt to give answers even if no tools can be used (or do I just leave it as is?)
+
+            # TODO: Make it so the llm always returns relevant items in the answer and make sure
+            # to put only a single item in the code block and not an array of elements
             # TODO: Save and use context of the chat
             # TODO: Make it possible to call multiple tools (not sure if it is possible with gemini and any other llm)
 
+            # NOTE: might refactor this to make quering model recursive and make it possible to request multiple tool calls
+
+            # Initialize the session and retrieve the list of tools
             await session.initialize()
             tools_res = await session.list_tools()
-
             declarations = tools_res_to_gemini_func_declaration(tools_res.tools)
             content: types.ContentListUnion = [
                 types.UserContent(parts=[types.Part.from_text(text=body.question)])
             ]
 
+            # Ask the question to the model with the tools included
             ai_res = query_model(content, declarations)
+
+            # If ai responded with text return it immediately
             if ai_res.text:
                 return AskResponse(answer=ai_res.text)
 
+            # Make sure that the AI response has all the required elements
             assert ai_res.candidates, "AI Response must have candidates"
             assert ai_res.candidates[0].content, "First AI Response must have content"
             assert (
@@ -71,6 +79,7 @@ async def ask_question(body: AskRequest):
 
             part = ai_res.candidates[0].content.parts[0]
 
+            # Call functions if the AI requested and reprompt the model with result from the tool call
             if part.function_call and part.function_call.name:
                 assert (
                     part.function_call.name and part.function_call.args
