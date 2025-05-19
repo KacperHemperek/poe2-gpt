@@ -1,9 +1,10 @@
 import json
 
-from ai_client import client
 from google.genai import types
 from mcp import Tool as MCPTool
 from mcp.types import CallToolResult
+
+from backend.ai_client import client
 
 
 def map_type(type_str: str) -> types.Type:
@@ -75,6 +76,32 @@ def dump_function_response(function_res: CallToolResult) -> dict:
         )
 
 
+def calculate_attacks_per_second(attack_duration_ms):
+    """
+    Calculate attacks per second from attack duration in milliseconds.
+
+    Args:
+        attack_duration_ms (int): Attack duration in milliseconds
+
+    Returns:
+        float: Attacks per second rounded to 2 decimal places
+    """
+    if attack_duration_ms <= 0:
+        raise ValueError("Attack duration must be positive")
+
+    # Convert milliseconds to seconds and calculate attacks per second
+    attacks_per_second = 1000 / attack_duration_ms
+
+    # Round to 2 decimal places
+    return round(attacks_per_second, 2)
+
+
+system_prompt = """
+You are a helpful assistant that plays Path of Exile 2 and knows the game in depth and can answer any questions about the game.
+You can only answer questions about the game and you cannot answer any other questions or provide any other information.
+"""
+
+
 def query_model(
     content: types.ContentListUnion,
     function_declarations: list[types.FunctionDeclaration],
@@ -102,6 +129,6 @@ def query_model(
             ALways put only a single element in the code block and not an array of elements. If you get an array of elements from tool
             and use either all of them or some of them, make sure to put every relevant item in a separate code block.
             """,
-            tools=[types.Tool(function_declarations=function_declarations)],
+            # tools=[types.Tool(function_declarations=function_declarations)],
         ),
     )
