@@ -44,8 +44,8 @@ async def ask_question(body: AskRequest):
     """
     async with sse_client(
         "http://localhost:1337/mcp",
-    ) as streams:
-        async with ClientSession(streams[0], streams[1]) as session:
+    ) as (read, write):
+        async with ClientSession(read, write) as session:
 
             # TODO: Make it so the llm always returns relevant items in the answer and make sure
             # to put only a single item in the code block and not an array of elements
@@ -59,7 +59,7 @@ async def ask_question(body: AskRequest):
             tools_res = await session.list_tools()
             declarations = tools_res_to_gemini_func_declaration(tools_res.tools)
             content: types.ContentListUnion = [
-                types.UserContent(parts=[types.Part.from_text(text=body.question)])
+                types.UserContent(parts=[types.Part.from_text(text=body.question)]),
             ]
 
             # Ask the question to the model with the tools included
@@ -144,7 +144,7 @@ async def get_items(req: GetItemsRequest) -> GetItemsResponse:
         type (str): The type of the items to retrieve. Available types are "crossbow" and "bow".
 
     Returns:
-        list[dict]: A list of items matching the given type.
+        GetItemsResponse: A response containing items field with a list of all items of the given type
     """
     type = req.type.lower()
 

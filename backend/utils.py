@@ -81,6 +81,7 @@ def query_model(
 ):
     """Query the gemini model allowing to use provided tools with the given tools"""
 
+    # TODO: Try out rag instead of using tools to retrieve data from poe api
     return client.models.generate_content(
         model="gemini-2.0-flash",
         contents=content,
