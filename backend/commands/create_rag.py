@@ -1,12 +1,9 @@
 from dotenv import load_dotenv
-from langchain_core.documents import Document
 
 from backend.commands.utils import (
     get_implicit_string,
-    get_item_id,
     get_json_from_url,
     get_requirements_string,
-    transform_to_metadata_dict,
 )
 from backend.db import chroma
 from backend.utils import calculate_attacks_per_second
@@ -116,12 +113,7 @@ def main():
     item_strings = get_item_strings(items, get_mods_from_api())
 
     # Insert all items into the database with their corresponding metadata
-    docs: list[Document] = []
-    for string, item in zip(item_strings, items):
-        metadata = transform_to_metadata_dict(item)
-        docs.append(Document(page_content=string, metadata=metadata))
-
-    chroma.poe_store.add_documents(docs, ids=[get_item_id(item) for item in items])
+    chroma.insert_items(item_strings, items)
 
 
 if __name__ == "__main__":
